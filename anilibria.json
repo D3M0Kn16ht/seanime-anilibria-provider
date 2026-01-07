@@ -1,0 +1,110 @@
+/// <reference path="./online-streaming-provider.d.ts" />
+
+class Provider {
+    constructor() {
+        this.id = "anilibria";
+        this.name = "Anilibria";
+        this.api = "https://api.anilibria.tv/v3";
+    }
+
+    getSettings() {
+        return {
+            episodeServers: ["Anilibria"],
+            supportsDub: true
+        };
+    }
+
+    async search(query) {
+        const q = query.query.trim();
+        const url = `${this.api}/title/search?search=${encodeURIComponent(q)}&limit=20`;
+
+        const res = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0" }
+        });
+
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        if (!data.list) return [];
+
+        return data.list.map(item => ({
+            id: String(item.id),
+            title: item.names?.ru || item.names?.en || "Без названия",
+            url: `${this.api}/title?id=${item.id}`,
+            subOrDub: "dub"
+        }));
+    }
+
+    async findEpisodes(id) {
+        const url = `${this.api}/title?id=${id}`;
+
+        const res = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0" }
+        });
+
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        if (!data.player?.list) return [];
+
+        const episodes = [];
+
+        for (const epNum in data.player.list) {
+            const ep = data.player.list[epNum];
+            episodes.push({
+                id: String(ep.id),
+                number: Number(epNum),
+                title: `Episode ${epNum}`,
+                url: `${this.api}/title/episode?id=${ep.id}`
+            });
+        }
+
+        return episodes;
+    }
+
+    async findEpisodeServer(episode, server) {
+        const res = await fetch(episode.url, {
+            headers: { "User-Agent": "Mozilla/5.0" }
+        });
+
+        if (!res.ok) {
+            return {
+                server: "Anilibria",
+                headers: { "User-Agent": "Mozilla/5.0" },
+                videoSources: []
+            };
+        }
+
+        const data = await res.json();
+        const sources = [];
+
+        const hls = data.hls || {};
+        const mp4 = data.mp4 || {};
+
+        for (const q in hls) {
+            sources.push({
+                quality: `${q}p`,
+                type: "m3u8",
+                subtitles: [],
+                url: hls[q].src
+            });
+        }
+
+        for (const q in mp4) {
+            sources.push({
+                quality: `${q}p`,
+                type: "mp4",
+                subtitles: [],
+                url: mp4[q].src
+            });
+        }
+
+        return {
+            server: "Anilibria",
+            headers: { "User-Agent": "Mozilla/5.0" },
+            videoSources: sources
+        };
+    }
+}
+
+module.exports = Provider;
